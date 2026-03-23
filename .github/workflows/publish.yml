@@ -1,0 +1,133 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write      # required for OIDC provenance attestation
+  packages: write      # required to publish to GitHub Packages
+  attestations: write  # required to write attestations
+
+jobs:
+  # ── 1. Build & test once, upload the dist artifact ────────────────────────
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  # ── 2. Publish to npm (npmjs.com) with provenance attestation ─────────────
+  publish-npm:
+    name: Publish → npm
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/vitest-graphql-coverage
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to npm (with provenance)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Generate artifact attestation for npm tarball
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/**
+
+  # ── 3. Publish to GitHub Package Registry with provenance attestation ──────
+  publish-gpr:
+    name: Publish → GitHub Packages
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-packages
+      url: https://github.com/${{ github.repository }}/packages
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: '@${{ github.repository_owner }}'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Rewrite package name for GitHub Packages
+        # GitHub Packages requires a scoped name: @owner/package
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.name = '@${OWNER}/' + pkg.name.replace(/^@[^/]+\//, '');
+            pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Publish to GitHub Packages (with provenance)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate artifact attestation for GitHub Packages tarball
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/**

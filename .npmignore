@@ -1,0 +1,6 @@
+src/
+*.test.*
+__fixtures__/
+.github/
+tsconfig.json
+tsup.config.ts

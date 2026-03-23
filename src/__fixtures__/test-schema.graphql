@@ -1,0 +1,22 @@
+type Query {
+  user(id: ID!): User
+  users(filter: UserFilter): [User!]!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String
+  posts: [Post!]
+}
+
+type Post {
+  id: ID!
+  title: String!
+  body: String
+}
+
+input UserFilter {
+  name: String
+  email: String!
+}
