@@ -192,12 +192,6 @@ export function registerSchemaForCoverage(schema: GraphQLSchema, schemaFilePath:
   }
 }
 
-export function registerSchemaFileForCoverage(schemaFilePath: string): void {
-  if (!process.env.VITEST) return;
-  registeredFilePaths.add(schemaFilePath);
-  registerFlushHooks();
-}
-
 export function getHitData(): HitData {
   return {
     schemaFilePaths: Array.from(registeredFilePaths),

@@ -40,14 +40,6 @@ export { schema };
 
 > `registerSchemaForCoverage` is a no-op outside of Vitest (i.e. in production), so it is safe to call unconditionally.
 
-If you load your schema from SDL files but build it with a different mechanism (e.g. code-first), you can register the file path alone:
-
-```ts
-import { registerSchemaFileForCoverage } from 'vitest-graphql-coverage/register';
-
-registerSchemaFileForCoverage(new URL('./schema.graphql', import.meta.url).pathname);
-```
-
 ### 2. Add the reporter to your Vitest config
 
 ```ts
@@ -90,10 +82,6 @@ Your `.graphql` files will now appear alongside your `.ts` files in the coverage
 ### `registerSchemaForCoverage(schema, schemaFilePath)`
 
 Instruments all resolvers on the given `GraphQLSchema` to record hit counts, and registers `schemaFilePath` so the reporter knows which `.graphql` file to map results back to. Call this once per schema at startup.
-
-### `registerSchemaFileForCoverage(schemaFilePath)`
-
-Registers a schema file path without instrumenting resolvers. Use this when you manage resolver instrumentation separately or use a code-first schema builder that doesn't load SDL files.
 
 ### `GraphQLCoverageReporter`
 
