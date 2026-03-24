@@ -269,11 +269,9 @@ export function buildFileCoverage(schemaFilePath: string, hitData: HitData) {
   } satisfies FileCoverageData;
 }
 
-// NOTE: This reporter relies on process.on('exit') handlers in worker processes
-// to flush hit data before onFinished reads it. This requires pool: 'forks' in
-// your vitest config (each test file runs in a child process that fully exits).
-// With pool: 'threads', workers share the main process and 'exit' never fires
-// for individual workers, so no hit data is collected.
+// Hit data is flushed via afterAll() in register.ts, which fires after each
+// test file completes and before the worker signals done to the main process.
+// This works with both pool: 'forks' and pool: 'threads' (the default).
 export default class GraphQLCoverageReporter implements Reporter {
   onInit(_ctx: Vitest): void {
     // Recreate the dir in case a prior onFinished cleaned it up mid-run,
