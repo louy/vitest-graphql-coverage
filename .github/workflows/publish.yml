@@ -6,9 +6,9 @@ on:
 
 permissions:
   contents: read
-  id-token: write      # required for OIDC provenance attestation
-  packages: write      # required to publish to GitHub Packages
-  attestations: write  # required to write attestations
+  id-token: write # required for OIDC provenance attestation
+  packages: write # required to publish to GitHub Packages
+  attestations: write # required to write attestations
 
 jobs:
   # ── 1. Build & test once, upload the dist artifact ────────────────────────
@@ -49,6 +49,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
 
+    # Uses npm trusted publisher
     environment:
       name: npm
       url: https://www.npmjs.com/package/vitest-graphql-coverage
@@ -73,8 +74,6 @@ jobs:
 
       - name: Publish to npm (with provenance)
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Generate artifact attestation for npm tarball
         uses: actions/attest-build-provenance@v1
@@ -99,7 +98,7 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: https://npm.pkg.github.com
-          scope: '@${{ github.repository_owner }}'
+          scope: "@${{ github.repository_owner }}"
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
