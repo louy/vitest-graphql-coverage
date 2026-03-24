@@ -1,6 +1,7 @@
 import { GraphQLSchema, GraphQLObjectType, GraphQLInterfaceType, GraphQLInputObjectType, isInputObjectType, getNamedType, defaultFieldResolver } from 'graphql';
 import { writeFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { afterAll } from 'vitest';
 
 export interface ArgHitData {
   provided: number;
@@ -25,6 +26,7 @@ const registeredFilePaths = new Set<string>();
 const fieldHits: Record<string, Record<string, FieldHitData>> = {};
 const inputFieldHits: Record<string, Record<string, number>> = {};
 let exitHandlerRegistered = false;
+let afterAllRegistered = false;
 
 function recordFieldHit(typeName: string, fieldName: string): void {
   if (!fieldHits[typeName]) fieldHits[typeName] = {};
@@ -101,31 +103,42 @@ function recordInputFieldHitsRecursive(schema: GraphQLSchema, inputTypeName: str
   }
 }
 
-function registerExitHandler(): void {
-  if (exitHandlerRegistered) return;
-  exitHandlerRegistered = true;
-  process.on('exit', () => {
-    try {
-      const dir = process.env.__VITEST_GRAPHQL_COVERAGE_DIR__;
-      if (!dir) return;
-      const hitData: HitData = {
-        schemaFilePaths: Array.from(registeredFilePaths),
-        fields: fieldHits,
-        inputFields: inputFieldHits,
-      };
-      const filename = path.join(dir, `${process.pid}-${Date.now()}.json`);
-      writeFileSync(filename, JSON.stringify(hitData));
-    } catch {
-      // exit handlers must not throw
-    }
-  });
+function writeHitDataToFile(): void {
+  try {
+    const dir = process.env.__VITEST_GRAPHQL_COVERAGE_DIR__;
+    if (!dir) return;
+    const hitData: HitData = {
+      schemaFilePaths: Array.from(registeredFilePaths),
+      fields: fieldHits,
+      inputFields: inputFieldHits,
+    };
+    writeFileSync(path.join(dir, `${process.pid}-${Date.now()}.json`), JSON.stringify(hitData));
+  } catch {
+    // must not throw
+  }
+}
+
+function registerFlushHooks(): void {
+  // Primary: use Vitest's afterAll (imported statically). This fires after all
+  // tests in a worker complete, BEFORE the worker signals done to the main
+  // process — so the JSON file exists when onFinished reads the dir.
+  if (!afterAllRegistered) {
+    afterAllRegistered = true;
+    afterAll(writeHitDataToFile);
+  }
+
+  // Fallback: process exit handler (covers non-Vitest contexts and thread pools).
+  if (!exitHandlerRegistered) {
+    exitHandlerRegistered = true;
+    process.on('exit', writeHitDataToFile);
+  }
 }
 
 export function registerSchemaForCoverage(schema: GraphQLSchema, schemaFilePath: string): void {
   if (!process.env.VITEST) return;
 
   registeredFilePaths.add(schemaFilePath);
-  registerExitHandler();
+  registerFlushHooks();
 
   const typeMap = schema.getTypeMap();
   for (const [typeName, type] of Object.entries(typeMap)) {
@@ -182,7 +195,7 @@ export function registerSchemaForCoverage(schema: GraphQLSchema, schemaFilePath:
 export function registerSchemaFileForCoverage(schemaFilePath: string): void {
   if (!process.env.VITEST) return;
   registeredFilePaths.add(schemaFilePath);
-  registerExitHandler();
+  registerFlushHooks();
 }
 
 export function getHitData(): HitData {
@@ -199,4 +212,5 @@ export function _resetForTesting(): void {
   for (const key of Object.keys(fieldHits)) delete fieldHits[key];
   for (const key of Object.keys(inputFieldHits)) delete inputFieldHits[key];
   exitHandlerRegistered = false;
+  afterAllRegistered = false;
 }

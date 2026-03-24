@@ -1,12 +1,18 @@
-import type { Reporter, Vitest, File } from 'vitest';
-import type { CoverageMap } from 'istanbul-lib-coverage';
-import { createFileCoverage } from 'istanbul-lib-coverage';
-import { parse, TypeNode, ASTNode, InputObjectTypeDefinitionNode, ObjectTypeDefinitionNode, InterfaceTypeDefinitionNode } from 'graphql';
-import { readFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
-import { randomUUID } from 'node:crypto';
-import type { HitData } from './register.js';
+import type { Reporter, Vitest, File } from "vitest";
+import type { CoverageMap, FileCoverageData } from "istanbul-lib-coverage";
+import {
+  parse,
+  TypeNode,
+  ASTNode,
+  InputObjectTypeDefinitionNode,
+  ObjectTypeDefinitionNode,
+  InterfaceTypeDefinitionNode,
+} from "graphql";
+import { readFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
+import { randomUUID } from "node:crypto";
+import type { HitData } from "./register.js";
 
 interface Range {
   start: { line: number; column: number };
@@ -20,11 +26,29 @@ interface BranchMapping {
   line: number;
 }
 
+// The session dir is created eagerly at module-load time (i.e. when the vitest
+// config is evaluated), before Vitest forks worker processes.  This ensures the
+// env var is present in every fork so exit-handler writes land in the right dir.
+const SESSION_DIR = path.join(
+  os.tmpdir(),
+  `vitest-gql-cov-${randomUUID().slice(0, 8)}`,
+);
+mkdirSync(SESSION_DIR, { recursive: true });
+process.env.__VITEST_GRAPHQL_COVERAGE_DIR__ = SESSION_DIR;
+
 let tempDir: string | undefined;
 
 function locationFromNode(node: ASTNode): Range {
-  const loc = (node as { loc?: { startToken: { line: number; column: number }; endToken: { line: number; column: number } } }).loc;
-  if (!loc) return { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } };
+  const loc = (
+    node as {
+      loc?: {
+        startToken: { line: number; column: number };
+        endToken: { line: number; column: number };
+      };
+    }
+  ).loc;
+  if (!loc)
+    return { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } };
   return {
     start: { line: loc.startToken.line, column: loc.startToken.column - 1 },
     end: { line: loc.endToken.line, column: loc.endToken.column - 1 },
@@ -32,8 +56,17 @@ function locationFromNode(node: ASTNode): Range {
 }
 
 function getBangRange(node: ASTNode): Range {
-  const loc = (node as { loc?: { end: number; startToken: { line: number; column: number }; endToken: { line: number; column: number } } }).loc;
-  if (!loc) return { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } };
+  const loc = (
+    node as {
+      loc?: {
+        end: number;
+        startToken: { line: number; column: number };
+        endToken: { line: number; column: number };
+      };
+    }
+  ).loc;
+  if (!loc)
+    return { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } };
   // The ! is the last character of a NonNullType node
   return {
     start: { line: loc.endToken.line, column: loc.endToken.column - 2 },
@@ -44,7 +77,7 @@ function getBangRange(node: ASTNode): Range {
 interface BranchContext {
   typeName: string;
   fieldName: string;
-  kind: 'return' | 'arg' | 'input';
+  kind: "return" | "arg" | "input";
   argName?: string;
   hitData: HitData;
   branchMap: Record<string, BranchMapping>;
@@ -53,13 +86,13 @@ interface BranchContext {
 }
 
 function walkTypeForBranches(typeNode: TypeNode, ctx: BranchContext): void {
-  if (typeNode.kind === 'NonNullType') {
+  if (typeNode.kind === "NonNullType") {
     const idx = ctx.branchIndex.value++;
     const bangRange = getBangRange(typeNode);
 
     ctx.branchMap[idx] = {
       loc: bangRange,
-      type: 'if-else',
+      type: "if-else",
       locations: [bangRange, bangRange],
       line: bangRange.start.line,
     };
@@ -69,13 +102,13 @@ function walkTypeForBranches(typeNode: TypeNode, ctx: BranchContext): void {
     let nullCount = 0;
     let nonNullCount = 0;
 
-    if (ctx.kind === 'return') {
+    if (ctx.kind === "return") {
       nullCount = fieldData?.nullReturn ?? 0;
       nonNullCount = fieldData?.nonNullReturn ?? 0;
-    } else if (ctx.kind === 'arg' && ctx.argName) {
+    } else if (ctx.kind === "arg" && ctx.argName) {
       nullCount = fieldData?.args[ctx.argName]?.nullCount ?? 0;
       nonNullCount = fieldData?.args[ctx.argName]?.nonNullCount ?? 0;
-    } else if (ctx.kind === 'input') {
+    } else if (ctx.kind === "input") {
       const total = ctx.hitData.inputFields[ctx.typeName]?.[ctx.fieldName] ?? 0;
       nonNullCount = total;
       nullCount = 0; // non-null input fields: null arm unused
@@ -84,7 +117,7 @@ function walkTypeForBranches(typeNode: TypeNode, ctx: BranchContext): void {
     ctx.b[idx] = [nullCount, nonNullCount];
 
     walkTypeForBranches(typeNode.type, ctx);
-  } else if (typeNode.kind === 'ListType') {
+  } else if (typeNode.kind === "ListType") {
     walkTypeForBranches(typeNode.type, ctx);
   }
   // NamedType: leaf, stop
@@ -106,14 +139,20 @@ export function mergeHitData(sources: HitData[]): HitData {
       if (!merged.fields[typeName]) merged.fields[typeName] = {};
       for (const [fieldName, fieldData] of Object.entries(typeFields)) {
         if (!merged.fields[typeName][fieldName]) {
-          merged.fields[typeName][fieldName] = { count: 0, args: {}, nullReturn: 0, nonNullReturn: 0 };
+          merged.fields[typeName][fieldName] = {
+            count: 0,
+            args: {},
+            nullReturn: 0,
+            nonNullReturn: 0,
+          };
         }
         const m = merged.fields[typeName][fieldName];
         m.count += fieldData.count;
         m.nullReturn += fieldData.nullReturn;
         m.nonNullReturn += fieldData.nonNullReturn;
         for (const [argName, argData] of Object.entries(fieldData.args)) {
-          if (!m.args[argName]) m.args[argName] = { provided: 0, nullCount: 0, nonNullCount: 0 };
+          if (!m.args[argName])
+            m.args[argName] = { provided: 0, nullCount: 0, nonNullCount: 0 };
           m.args[argName].provided += argData.provided;
           m.args[argName].nullCount += argData.nullCount;
           m.args[argName].nonNullCount += argData.nonNullCount;
@@ -121,10 +160,14 @@ export function mergeHitData(sources: HitData[]): HitData {
       }
     }
 
-    for (const [inputTypeName, inputFields] of Object.entries(src.inputFields)) {
-      if (!merged.inputFields[inputTypeName]) merged.inputFields[inputTypeName] = {};
+    for (const [inputTypeName, inputFields] of Object.entries(
+      src.inputFields,
+    )) {
+      if (!merged.inputFields[inputTypeName])
+        merged.inputFields[inputTypeName] = {};
       for (const [fieldName, count] of Object.entries(inputFields)) {
-        merged.inputFields[inputTypeName][fieldName] = (merged.inputFields[inputTypeName][fieldName] ?? 0) + count;
+        merged.inputFields[inputTypeName][fieldName] =
+          (merged.inputFields[inputTypeName][fieldName] ?? 0) + count;
       }
     }
   }
@@ -134,7 +177,7 @@ export function mergeHitData(sources: HitData[]): HitData {
 }
 
 export function buildFileCoverage(schemaFilePath: string, hitData: HitData) {
-  const source = readFileSync(schemaFilePath, 'utf8');
+  const source = readFileSync(schemaFilePath, "utf8");
   const document = parse(source);
 
   const statementMap: Record<string, Range> = {};
@@ -146,17 +189,23 @@ export function buildFileCoverage(schemaFilePath: string, hitData: HitData) {
   const branchIndex = { value: 0 };
 
   for (const def of document.definitions) {
-    if (def.kind === 'ObjectTypeDefinition' || def.kind === 'InterfaceTypeDefinition') {
-      const typeDef = def as ObjectTypeDefinitionNode | InterfaceTypeDefinitionNode;
+    if (
+      def.kind === "ObjectTypeDefinition" ||
+      def.kind === "InterfaceTypeDefinition"
+    ) {
+      const typeDef = def as
+        | ObjectTypeDefinitionNode
+        | InterfaceTypeDefinitionNode;
       for (const field of typeDef.fields ?? []) {
         statementMap[stmtIndex] = locationFromNode(field);
-        s[stmtIndex] = hitData.fields[typeDef.name.value]?.[field.name.value]?.count ?? 0;
+        s[stmtIndex] =
+          hitData.fields[typeDef.name.value]?.[field.name.value]?.count ?? 0;
         stmtIndex++;
 
         walkTypeForBranches(field.type, {
           typeName: typeDef.name.value,
           fieldName: field.name.value,
-          kind: 'return',
+          kind: "return",
           hitData,
           branchMap,
           b,
@@ -165,13 +214,16 @@ export function buildFileCoverage(schemaFilePath: string, hitData: HitData) {
 
         for (const arg of field.arguments ?? []) {
           statementMap[stmtIndex] = locationFromNode(arg);
-          s[stmtIndex] = hitData.fields[typeDef.name.value]?.[field.name.value]?.args[arg.name.value]?.provided ?? 0;
+          s[stmtIndex] =
+            hitData.fields[typeDef.name.value]?.[field.name.value]?.args[
+              arg.name.value
+            ]?.provided ?? 0;
           stmtIndex++;
 
           walkTypeForBranches(arg.type, {
             typeName: typeDef.name.value,
             fieldName: field.name.value,
-            kind: 'arg',
+            kind: "arg",
             argName: arg.name.value,
             hitData,
             branchMap,
@@ -182,17 +234,18 @@ export function buildFileCoverage(schemaFilePath: string, hitData: HitData) {
       }
     }
 
-    if (def.kind === 'InputObjectTypeDefinition') {
+    if (def.kind === "InputObjectTypeDefinition") {
       const inputDef = def as InputObjectTypeDefinitionNode;
       for (const field of inputDef.fields ?? []) {
         statementMap[stmtIndex] = locationFromNode(field);
-        s[stmtIndex] = hitData.inputFields[inputDef.name.value]?.[field.name.value] ?? 0;
+        s[stmtIndex] =
+          hitData.inputFields[inputDef.name.value]?.[field.name.value] ?? 0;
         stmtIndex++;
 
         walkTypeForBranches(field.type, {
           typeName: inputDef.name.value,
           fieldName: field.name.value,
-          kind: 'input',
+          kind: "input",
           hitData,
           branchMap,
           b,
@@ -202,7 +255,10 @@ export function buildFileCoverage(schemaFilePath: string, hitData: HitData) {
     }
   }
 
-  return createFileCoverage({
+  // Return a plain data object so the host's istanbul-lib-coverage FileCoverage
+  // constructor receives a POJO — avoiding the dual-module-instance issue where
+  // our bundled FileCoverage class is unrecognised by the v8 provider's copy.
+  return {
     path: schemaFilePath,
     statementMap,
     s,
@@ -210,25 +266,36 @@ export function buildFileCoverage(schemaFilePath: string, hitData: HitData) {
     b,
     fnMap: {},
     f: {},
-  });
+  } satisfies FileCoverageData;
 }
 
+// NOTE: This reporter relies on process.on('exit') handlers in worker processes
+// to flush hit data before onFinished reads it. This requires pool: 'forks' in
+// your vitest config (each test file runs in a child process that fully exits).
+// With pool: 'threads', workers share the main process and 'exit' never fires
+// for individual workers, so no hit data is collected.
 export default class GraphQLCoverageReporter implements Reporter {
   onInit(_ctx: Vitest): void {
-    tempDir = path.join(os.tmpdir(), `vitest-gql-cov-${randomUUID().slice(0, 8)}`);
-    mkdirSync(tempDir, { recursive: true });
-    process.env.__VITEST_GRAPHQL_COVERAGE_DIR__ = tempDir;
+    // Recreate the dir in case a prior onFinished cleaned it up mid-run,
+    // and re-assert the env var so workers forked after this point see it.
+    mkdirSync(SESSION_DIR, { recursive: true });
+    process.env.__VITEST_GRAPHQL_COVERAGE_DIR__ = SESSION_DIR;
+    tempDir = SESSION_DIR;
   }
 
   onFinished(_files?: File[], _errors?: unknown[], coverage?: unknown): void {
-    if (!coverage || typeof (coverage as CoverageMap).addFileCoverage !== 'function') return;
+    if (
+      !coverage ||
+      typeof (coverage as CoverageMap).addFileCoverage !== "function"
+    )
+      return;
 
     const dir = tempDir;
     if (!dir) return;
 
     let jsonFiles: string[];
     try {
-      jsonFiles = readdirSync(dir).filter((f) => f.endsWith('.json'));
+      jsonFiles = readdirSync(dir).filter((f) => f.endsWith(".json"));
     } catch {
       return;
     }
@@ -236,7 +303,7 @@ export default class GraphQLCoverageReporter implements Reporter {
     const sources: HitData[] = [];
     for (const file of jsonFiles) {
       try {
-        const raw = readFileSync(path.join(dir, file), 'utf8');
+        const raw = readFileSync(path.join(dir, file), "utf8");
         sources.push(JSON.parse(raw) as HitData);
       } catch {
         // skip unreadable files
@@ -250,7 +317,10 @@ export default class GraphQLCoverageReporter implements Reporter {
         const fileCoverage = buildFileCoverage(schemaFilePath, hitData);
         (coverage as CoverageMap).addFileCoverage(fileCoverage);
       } catch (e) {
-        console.warn(`[vitest-graphql-coverage] Failed to build coverage for ${schemaFilePath}:`, e);
+        console.warn(
+          `[vitest-graphql-coverage] Failed to build coverage for ${schemaFilePath}:`,
+          e,
+        );
       }
     }
 
