@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/louay-hesham/vitest-graphql-coverage.git"
+    "url": "https://github.com/louy/vitest-graphql-coverage.git"
   },
   "license": "MIT",
   "exports": {
