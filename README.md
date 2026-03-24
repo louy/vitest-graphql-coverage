@@ -9,7 +9,7 @@ Test coverage for your GraphQL schema backend (includes field resolvers, args, a
 ## How it works
 
 - **Statements** — each field and argument definition in your schema is a statement. The count is how many times that field/argument was resolved during your tests.
-- **Branches** — each `!` (non-null marker) in your schema is a branch with two arms: _null returned_ and _non-null returned_. This tells you whether your tests exercise both nullable and non-nullable paths.
+- **Branches** — each `!` (non-null marker) in your schema is a branch with two arms: _null_ and _non-null_ (returned for fields, passed for args and input fields). This tells you whether your tests exercise both paths.
 
 ## Installation
 
