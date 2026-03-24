@@ -5,6 +5,7 @@ Istanbul-compatible coverage maps for `.graphql` schema files in Vitest.
 Tracks which fields, arguments, and input fields were actually exercised by your tests and surfaces the results as standard statement and branch coverage in any Istanbul reporter (HTML, lcov, text, JSON, Codecov, etc.).
 
 [![CI](https://github.com/louy/vitest-graphql-coverage/actions/workflows/ci.yml/badge.svg)](https://github.com/louy/vitest-graphql-coverage/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/louy/vitest-graphql-coverage/graph/badge.svg?token=LMUs5ErZcx)](https://codecov.io/gh/louy/vitest-graphql-coverage)
 [![npm](https://img.shields.io/npm/v/vitest-graphql-coverage)](https://www.npmjs.com/package/vitest-graphql-coverage)
 
 ## How it works
