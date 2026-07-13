@@ -1,4 +1,5 @@
-import type { Reporter, Vitest, File } from "vitest";
+import type { Reporter } from "vitest/reporters";
+import type { Vitest, RunnerTestFile } from "vitest/node";
 import type { CoverageMap, FileCoverageData } from "istanbul-lib-coverage";
 import {
   parse,
@@ -281,7 +282,18 @@ export default class GraphQLCoverageReporter implements Reporter {
     tempDir = SESSION_DIR;
   }
 
-  onFinished(_files?: File[], _errors?: unknown[], coverage?: unknown): void {
+  // Vitest 3 passes the coverage map as the third argument to onFinished.
+  onFinished(_files?: RunnerTestFile[], _errors?: unknown[], coverage?: unknown): void {
+    this.addSchemaCoverage(coverage);
+  }
+
+  // Vitest 4 no longer passes coverage to onFinished; it emits a dedicated
+  // onCoverage hook (before reports are written) with the coverage map instead.
+  onCoverage(coverage: unknown): void {
+    this.addSchemaCoverage(coverage);
+  }
+
+  private addSchemaCoverage(coverage: unknown): void {
     if (
       !coverage ||
       typeof (coverage as CoverageMap).addFileCoverage !== "function"

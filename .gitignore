@@ -2,3 +2,6 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+
+# e2e fixtures resolve their vitest major fresh on each run (no committed lockfile)
+e2e/fixtures/*/package-lock.json
