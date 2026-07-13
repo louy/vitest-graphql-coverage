@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execSync, spawnSync } from 'node:child_process';
-import { readFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, readdirSync, existsSync, rmSync, mkdirSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as url from 'node:url';
@@ -34,16 +34,18 @@ function run(cmd: string, args: string[], cwd: string) {
   return result;
 }
 
-// Build once, then pack the package into a tarball the fixtures can install.
+// Pack the package into a tarball the fixtures can install. `npm pack` runs the
+// `prepare` script, which builds `dist/`, so no separate build step is needed.
 let tarball: string;
 beforeAll(() => {
-  execSync('npm run build', { cwd: rootDir, stdio: 'pipe' });
-
   const packDir = path.join(os.tmpdir(), 'vitest-gql-cov-e2e-pack');
   rmSync(packDir, { recursive: true, force: true });
   mkdirSync(packDir, { recursive: true });
-  const packed = run('npm', ['pack', '--json', '--pack-destination', packDir], rootDir);
-  const filename = (JSON.parse(packed.stdout) as Array<{ filename: string }>)[0].filename;
+  // Don't parse `npm pack`'s stdout: the `prepare` build script writes there too.
+  // The dir is freshly emptied, so the single resulting .tgz is unambiguous.
+  run('npm', ['pack', '--pack-destination', packDir], rootDir);
+  const filename = readdirSync(packDir).find((f) => f.endsWith('.tgz'));
+  if (!filename) throw new Error('npm pack did not produce a tarball');
   tarball = path.join(packDir, filename);
 }, 120_000);
 
