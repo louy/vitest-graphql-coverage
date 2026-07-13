@@ -73,7 +73,9 @@ jobs:
           path: dist/
 
       - name: Publish to npm (with provenance)
-        run: npm publish --provenance --access public
+        # --ignore-scripts so the `prepare` build doesn't overwrite the
+        # already-built-and-tested dist artifact downloaded above.
+        run: npm publish --provenance --access public --ignore-scripts
 
       - name: Generate artifact attestation for npm tarball
         uses: actions/attest-build-provenance@v1
@@ -122,7 +124,9 @@ jobs:
           "
 
       - name: Publish to GitHub Packages (with provenance)
-        run: npm publish --provenance --access public
+        # --ignore-scripts so the `prepare` build doesn't overwrite the
+        # already-built-and-tested dist artifact downloaded above.
+        run: npm publish --provenance --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

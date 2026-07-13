@@ -17,7 +17,7 @@ Test coverage for your GraphQL schema backend (includes field resolvers, args, a
 npm install --save-dev vitest-graphql-coverage
 ```
 
-Peer dependencies: `vitest ^3.0.0`, `graphql ^16.0.0`.
+Peer dependencies: `vitest ^3.0.0 || ^4.0.0`, `graphql ^16.0.0`.
 
 ## Setup
 
@@ -49,6 +49,10 @@ import GraphQLCoverageReporter from 'vitest-graphql-coverage/reporter';
 
 export default defineConfig({
   test: {
+    // Ensure the coverage instrumentation and your schema share a single
+    // `graphql` module instance. Without this, resolvers may not be recorded
+    // because `graphql`'s `instanceof` checks fail across module realms.
+    server: { deps: { inline: ['vitest-graphql-coverage'] } },
     reporters: [new GraphQLCoverageReporter()],
     coverage: {
       provider: 'v8', // or 'istanbul'
@@ -91,7 +95,7 @@ A Vitest `Reporter` class. Add an instance to the `reporters` array in your Vite
 
 | | Supported |
 |---|---|
-| Vitest | ^3.0.0 |
+| Vitest | ^3.0.0, ^4.0.0 |
 | `pool: 'threads'` (default) | yes |
 | `pool: 'forks'` | yes |
 | `@vitest/coverage-v8` | yes |

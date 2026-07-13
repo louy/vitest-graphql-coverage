@@ -2,10 +2,10 @@ import { buildSchema } from 'graphql';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as path from 'node:path';
-import { registerSchemaForCoverage } from '../../../dist/register.js';
+import { registerSchemaForCoverage } from 'vitest-graphql-coverage/register';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const schemaPath = path.join(__dirname, '..', 'schema.graphql');
+export const schemaPath = path.join(__dirname, '..', '..', 'schema.graphql');
 
 const typeDefs = readFileSync(schemaPath, 'utf8');
 export const schema = buildSchema(typeDefs);
